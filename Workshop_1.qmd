@@ -1,0 +1,478 @@
+---
+title: "Workshop 1, Financial Modeling and Programming"
+author: "Alberto Dorantes, Ph.D."
+date: "Oct 30, 2023"
+
+abstract: "This is an INDIVIDUAL workshop. In this workshop we learn about logistic regression applied to fundamental analysis in Finance. In addition, we practice data management programming skills using a big panel-dataset of historical financial statement variables." 
+
+format: 
+  html:
+    toc: true
+    toc-title: Content    
+    toc-location: left
+    toc-float: true
+    theme: united
+    highlight-style: zenburn
+    number-sections: true
+    fontsize: 0.9em
+    html-math-method: katex
+    
+knitr:
+  opts_chunk: 
+    warning: false
+    message: false
+---
+
+```{r global_options}
+#| include: false 
+#| warning: false
+#| message: false
+#| fig-width: 12
+#| fig-height: 8
+
+#knitr::opts_chunk$set(fig.width=12, fig.height=8, fig.path='Figs/',
+#                      warning=FALSE, message=FALSE)
+```
+
+```{r, include=FALSE}
+# Función para desplegar en formato de dinero $
+din<-function(x) {
+  paste0("$", formatC(as.numeric(x), format="f", digits=2, big.mark=","))
+}
+# To avoid scientific notation for numbers: 
+options(scipen=999)
+
+```
+
+```{r}/
+#| echo: false
+library(kableExtra)
+```
+
+# General directions for this Workshop
+
+You will work in RStudio. It is strongly recommended to have the latest version of R and RStudio. Once you are in RStudio, do the following.
+
+Create an R Notebook document (File -\> New File -\> R Notebook), where you have to write whatever is asked in this workshop. More specifically, you have to:
+
+-   Replicate all the R Code along with its output.
+
+-   You have to do whatever is asked in the workshop. It can be: a) Responses to specific **questions** and/or do an exercise/challenge.
+
+Any **QUESTION** or any **INTERPRETATION** you need to do will be written in **CAPITAL LETTERS**. For ANY QUESTION or INTERPRETATION, you have to RESPOND IN CAPITAL LETTERS right after the question.
+
+-   It is STRONGLY RECOMMENDED that you write your OWN NOTES as if this were your personal notebook. Your own workshop/notebook will be very helpful for your further study.
+
+You have to keep saving your .Rmd file, and ONLY SUBMIT the .html version of your .Rmd file. Pay attention in class to know how to generate an html file from your .Rmd.
+
+# Set up the name of your R Notebook for this workshop
+
+Setup title and name of your Workshop
+
+Once you have created a new R Notebook, you will see a sample R Notebook document. You must DELETE all the lines of this sample document except the first lines related to title and output. As title, write the workshop \# and course, and add a new line with your name. You have to end up with something like:
+
+------------------------------------------------------------------------
+
+title: "Workshop 1, Financial Modeling and Programming"
+
+author: YourName
+
+output: html_notebook
+
+------------------------------------------------------------------------
+
+Now you are ready to continue writing your first R Notebook.
+
+You can start writing your own notes/explanations we cover in this workshop. When you need to write lines of **R Code**, you need to click **Insert** at the top of the RStudio Window and select R. Immediately a **chunk of R code** will be set up to start writing your R code. You can execute this piece of code by clicking in the play button (green triangle).
+
+Note that you can open and edit several R Notebooks, which will appear as tabs at the top of the window. You can visualize the output (results) of your code in the console, located at the bottom of the window. Also, the created variables are listed in the environment, located in the top-right pane. The bottom-right pane shows the files, plots, installed packages, help, and viewer tabs.
+
+Save your R Notebook file as W1-YourName.Rmd. Go to the File menu and select Save As.
+
+To generate the .html file, you have **knit** your R Notebook. Pay attention how to do this in class.
+
+# Introduction
+
+In this workshop we practice data management with financial historical data, and review the logit regression model and its application to fundamental analysis.
+
+We will work with a real dataset of all historical financial variables of ALL US public firms that belong to the NYSE and the NASDAQ exchanges.
+
+We will use a logit model to examine whether some financial ratios are related to the probability that future stock return (1 year later) is higher than the market future return (1 year later).
+
+We will learn basic programming skills for the required data management and data modeling.
+
+You have to work with 2 datasets:
+
+-   firmsus2023.csv: List of all US public firms with general information of each firm
+
+-   dataus2023.csv : Panel data with historical financial quarterly data for all US public firms.
+
+You have to download these 2 files from Canvas/Modules and save in the directory where you have your workshop.
+
+The first dataset (dataus2023q2) contains the historical financial data of the firms, while the second dataset (firmsus2023) is a catalog of all firms along with the corresponding industry type and status (active or cancelled).
+
+The dataus2023q2 dataset has a panel-data (also called long format) structure. Each row has financial information for one US firm and 1 period (a quarter). All \$ amounts are in thousands ('1000s). Here is a data dictionary of the columns:
+
+| Variable           | Description                                                                                                                                                                                    |
+|----------------|--------------------------------------------------------|
+| firm               | Unique code of the company (also called ticker)                                                                                                                                                |
+| q                  | Quarter date                                                                                                                                                                                   |
+| fiscalmonth        | Month of the year when the firm closes a fiscal year                                                                                                                                           |
+| revenue            | Total sales of the firm from the first fiscal quarter to the current quarter                                                                                                                   |
+| cogs               | Cost of good sold - variable costs of the products sold - from the first fiscal quarter to the current quarter                                                                                 |
+| sgae               | Sales and general administrative expenses - from the first fiscal quarter to the current quarter                                                                                               |
+| otherincome        | Other operational income/expenses that are not directly from the core operations of the firm - from the first fiscal quarter to the current quarter                                            |
+| extraordinaryitems | Extra income/expenses not related to regular operations - from the first fiscal quarter to the current quarter                                                                                 |
+| finexp             | Financial expenses - interest expenses paid (generated from loans) - from the first fiscal quarter to the current quarter                                                                      |
+| incometax          | Income tax from the first fiscal quarter to the current quarter                                                                                                                                |
+| totalassets        | Total assets of the firm at the end of the quarter                                                                                                                                             |
+| currentassets      | Current assets of the firm at the end of the quarter                                                                                                                                           |
+| totalliabilities   | Total liabilities of the firm at the end of the quarter                                                                                                                                        |
+| currentliabilities | Current liabilities of the firm at the end of the quarter                                                                                                                                      |
+| longdebt           | Balance of long-term financial debt (loans to pay longer than 1 year)                                                                                                                          |
+| adjprice           | Stock adjusted price at the end of the quarter; adjusted for stock splits and dividend payments; used to calculate stock returns                                                               |
+| originalprice      | Historical stock price (not adjusted); used to calculate historical market value                                                                                                               |
+| sharesoutstanding  | Historical number of shares available in the market                                                                                                                                            |
+| fixedassets        | Fixed assets value at the end of the quarter                                                                                                                                                   |
+| year               | Calendar year                                                                                                                                                                                  |
+| yearf              | Fiscal year - this depends on when the firm ends its fiscal year; if fiscalmonth=12 in the quarter 3, then the fiscal year will start in Q4 of a year and ends in the Q3 of the following year |
+
+: Data dictionary of historical quarterly financial data.
+
+Each row of this dataset has quarterly financial data of one firm in one quarter. All firms have quarters from Q1 2000 to Q2 2023. Not all firms have existed since 2000, so if the first quarters are empty that means that the firm did not exist in the US financial market in those quarters. Then, it is possible to know when each firm went public to issue shares in the financial market: the first quarter with some non-empty data.
+
+Each firm has defined the month of the year used to close a fiscal year. For example, Apple closes the fiscal year at the end of Quarter 3 (end of September) of any year. Then, for Apple, in the Q3 of 2022, there will be a 12 for the fiscalmonth variable. In this case, Apple starts its fiscal year in the Q4 of each year and ends in the Q3 of the following year. Most of the firms (about 80%) close fiscal year in December, so these firms will have a 12 in the Q4 of each year.
+
+The variables related to sales and expenses are cumulative for each fiscal year. For example, Apple sold about \$117 billion in the last calendar quarter (Q4) of 2022, but this is the first fiscal quarter for Apple. For Q1 (calendar) 2023 (which is the 2nd fiscal quarter), Apple has about \$212 billion in the revenue variable, meaning that considering fiscal quarter 1 and 2, Apple has sold \$212 billion. For Q2 2023 Apple has about \$293 billion, meaning that the cumulative revenue of fiscal Q1, Q2 and Q3 is about \$293 billion. Then, if you select rows with fiscalmonth=12, then you will be selecting those quarters with annual financial information for each firm!
+
+Earnings before interest and Taxes (ebit) and Net Income (netincome) must be calculated as: 
+
+ebit = revenue - cogs - sgae
+
+netincome = ebit + otherincome + extraordinaryitems - finexp - incometax
+
+
+The firmsus2023.csv is a catalog of all active and cancelled US firms:
+
+| Variable          | Description                                           |
+|-------------------|-----------------------------------------------------|
+| firm              | Unique code of the company (also called ticker)       |
+| name              | Name of the firm                                      |
+| status            | Status of the firm: active or cancelled               |
+| partind           | Percent participation in the S&P500 market index      |
+| naics1            | North American Industry Classification Code - Level 1 |
+| naics2            | North American Industry Classification Code - Level 2 |
+| SectorEconomatica | Economatica Industry classification                   |
+
+
+# Review of logit regression and its applications in Finance
+
+The logit model is one type of non-linear regression model where the dependent variable is binary. The logistic or logit model is used to examine the relationship between one or more quantitative variables and the probability of an event happening (1=the event happens; 0 otherwise). For example, a bank that gives loans to businesses might be very interested in knowing which are the factors/variables/characteristics of firms that are more related to loan defaults. If the bank understands these factors, then it can improve its decisions about which firms deserve a loan, and minimize the losses due to loan defaults.
+
+In this workshop, we define the event to be whether a firm in a specific quarter has higher stock return compared to median returns of the firms within its industry. If the stock return is higher than the median return, then we codify the binary variable equal to 1; 0 otherwise.
+
+Then, in this case, the dependent variable of the regression is the binary variable with 1 if the stock outperforms the median of its industry and 0 otherwise. The independent or explanatory variables can be any financial indicator/ratio/variable that we believe is related to the likelihood of a stock to beat the market in the near future.
+
+We can define this logistic model using the following mathematical function. Imagine that Y is the binary dependent variable, then the probability that the event happens (Event=1) can be defined as:
+
+$$
+Prob(Event=1)=f(X_{1},X_{2},...,X_{n})
+$$
+
+The binary variable Event can be either 1 or 0, but the probability of Event=1 is a continuous value from 0 to 1. The function is a non-linear function defined as follows:
+
+$$
+Prob(Event=1)=\frac{1}{1+e^{-\left(b_{0}+b_{1}X_{1}+b_{2}X_{2}+...+b_{n}X_{n}\right)}}
+$$
+
+As we can see, the argument of the exponential function is actually a traditional regression equation. We can re-express this equation as follows:
+
+$$
+Y=b_{0}+b_{1}X_{1}+b_{2}X_{2}+...+b_{n}X_{n}
+$$ Now we use Y in the original non-linear function:
+
+$$
+Prob(Event=1)=\frac{1}{1+e^{-Y}}
+$$
+
+This is a **non-linear function** since the value of the function does not move in a linear way with a change in the value of one independent variable X.
+
+Let's work with an example of a model with only 1 independent variable $X_1$. Imagine that $X_1$ is the variable **earnings per share (eps)** of a firm, and the event is that the firm beats the market. Then, let's do a simple example with specific values for $b_0$, $b_1$, and a range of values for $eps$ from -1 to 1 jumping by 0.1:
+
+```{r}
+# The seq function creates a numeric vector. We specify the fist, last and the jumps:
+eps=seq(from=-1,to=1,by=0.1)
+eps
+# This vector has 21 values for x1 including the zero
+
+# I define b0=-0.5 and b1=10:
+b0=-0.5
+b1=10
+
+# I define a temporal variable Y to be the regression equation:
+Y = b0 + b1*eps
+# Since eps is a vector, then R performs a row-wise calculation using the equation for all values of eps
+
+# Now I create a vector with the values of the function according to the equation of the probability:
+prob = 1 / (1 + exp(-(Y)) )
+# I display the probability values of the function for all values of eps:
+prob
+
+# Finally, I plot the function values for all values of x1:
+plot(x=eps,y=prob,type="line")
+            
+```
+
+Here we can see that function is **not linear** with changes in eps. There is a specific range of values for eps close to 0 when the probability that the firm beats the market increases very fast up to a value of about 0.3 where the probability grows very slow with any more increase in eps.
+
+The interpretations of the magnitude of the coefficients $b_0$ and $b_1$ in logistic regression is not quite the same as the case of multiple regression. However, the interpretations of the sign of the coefficient (positive or negative) and the level of significance (pvalue) are the same as in the case of multiple regression model. What we can say up to know is that if $b_1$ is positive and significant (its p-value\<0.05), then it means that the variable, in this case, **eps** is significantly and positively related to the probability that a firm return outperform its industry median return.
+
+Before going to the interpretation of the magnitude of a coefficient, here is a quick explanation of how the logistic regression works and how it is estimated in any specialized software (such as R).
+
+Let's continue with the same event, which is that the firm return beats its industry median (in other words, that the firm return is higher than the median return of its industry). Then:
+
+p = probability that the firm beats its industry (Event=1); or that the event happens.
+
+(1-p) = probability that the firm DOES NOT beat its industry (Event=0); or that the event does not happen.
+
+To have a dependent variable that can get any numeric value from a negative value to a positive value, we can do the following mathematical transformation with these probabilities:
+
+$$
+Y=log\left(\frac{p}{1-p}\right)
+$$
+
+The $\left(\frac{p}{1-p}\right)$ is called the **odds ratio**:
+
+$$
+ODDSRATIO=\left(\frac{p}{1-p}\right)
+$$
+
+The odds ratio is the ratio of the probability of the event happening to the probability of the event NOT happening. Since p can have a value from 0 to 1, then the possible values of ODDSRATIO can be from 0 (when p=0) to infinity (when p=1). Since we want a variable that can have values from any negative to any positive value, then we can apply the logarithmic function, and then the range of this log will be from any negative value to any positive value.
+
+Now that we have a transformed variable Y (the log of ODDSRATIO) that uses the probability p, then we can use this variable as the dependent variable for our regression model:
+
+$$
+Y=log\left(\frac{p}{1-p}\right)=b_{0}+b_{1}X_{1}
+$$
+
+This mathematical *trick* help us to use a linear model to model a non-linear relationship!
+
+Then, with this transformation we can estimate a linear regression model (don't worry, R estimate it), so the coefficients $b_0$ and $b_1$ values define the logarithm of the odd ratio!, not the actual probability p of the event happening!
+
+How can we interpret the magnitude of the beta coefficients of this regression? Let's do a mathematical trick from the previous equation. We can apply the exponential function to both sides of the equation:
+
+$$
+e^{Y}=e^{log\left(\frac{p}{1-p}\right)}=e^{\left(b_{0}+b_{1}X_{1}\right)}=\left(\frac{p}{1-p}\right)=ODDSRATIO
+$$
+
+Following the rule of exponents, we can express this equation as:
+
+$$
+e^{Y}=e^{b_{0}}e^{b_{1}X_{1}}=ODDSRATIO
+$$
+
+Let's see what happens with ODDSRATIO if $X_1$ increases in 1 unit:
+
+$$
+e^{b_{0}}e^{b_{1}(X_{1}+1)}=e^{b_{0}}e^{b_{1}X_{1}}e^{b_{1}}=ODDSRATIO*(e^{b_{1}})
+$$
+
+Then, if $X_1$ increases in one unit, then the ODDSRATIO will be equal to ODDSRATIO times $e^{b_1}$. Then, $e^{b_1}$ will be the factor that indicates how many times the ODDSRATIO changes with a +1-unit change in $X_1$.
+
+Then:
+
+-   If $e^{b_1}$ = 1, then the ODDSRATIO does not change, meaning that there is no relationship between the variable $X_1$ and the probability of the event.
+
+-   If $e^{b_1}$ \> 1, then the ODDSRATIO will grow by this factor, meaning that there is a positive relationship between $X_1$ and the probability of the event.
+
+-   If $e^{b_1}$ \< 1, then the ODDSRATIO will decrease by this factor, meaning that there is a negative relationship between $X_1$ and the probability of the event.
+
+Then, when we see the output of a logistic regression, we need to apply the exponential function to the coefficients to provide a meaningful interpretation of the magnitude of the coefficients in the model.
+
+If we want to estimate the probability p for any value of $X_1$, we just need to do some algebraic manipulations to the previous equation:
+
+$$
+Y=log\left(\frac{p}{1-p}\right)=b_{0}+b_{1}X_{1}
+$$
+
+To get p from this equation, we can apply the exponential function to both sides:
+
+$$
+e^{Y}=\left(\frac{p}{1-p}\right)
+$$
+
+Leaving p alone, we multiply both sides times (1-p):
+
+$$
+e^{Y}\left(1-p\right)=p
+$$
+
+We continue playing with the terms to leave p alone:
+
+$$
+e^{Y}-pe^{Y}=p
+$$
+
+$$
+e^{Y}=p+pe^{Y}
+$$
+
+$$
+e^{Y}=p(1+e^{Y})
+$$
+
+$$
+p=\frac{e^{Y}}{\left(1+e^{Y}\right)}
+$$
+
+Dividing the numerator and the denominator by $e^Y$ ;
+
+$$
+p=\frac{1}{\left(\frac{1}{e^{Y}}+1\right)}=\frac{1}{\left(e^{-Y}+1\right)}
+$$
+
+This is the same mathematical equation we had used above to illustrate the non-linear relationship between the explanatory variables and the probability of an event happening!
+
+Fortunately, R performs all these calculations automatically when you run the predict function! So, you do not have to memorize these steps; I just tried to be *curious* to understand how the logistic model estimates predicted probabilities.
+
+# Data collection
+
+The dataset we will use for this workshop and for the final project is located in a public we site.
+
+This dataset has real historical information of all US public firms listed in NASDAQ and NYSE. It has data from Q1 2000 to Q2 2023. You can download the dataset as follows.
+
+You first need to install the packages ggplot2 and dplyr. You can do so using the right-hand side window of RStudio in the "Package" tab.
+
+Before running the rest of the chunks, you need to save your .Rmd in your computer.
+
+```{r}
+#| message: false
+#| warning: false
+
+# To avoid scientific notation:
+options(scipen=999)
+#Activate the dplyr library
+library(dplyr)
+
+# Load the datasets 
+uspanel <- read.csv("dataus2023.csv")
+usfirms <- read.csv("firmsus2023.csv")
+
+```
+
+# CHALLENGE 1 - CALCULATE QUARTERLY EBIT FROM YTD EBIT
+
+Using the uspanel dataset calculate EBIT as: revenue - cogs - sgae.
+
+The income-statement variables in this dataset are cumulative amounts (Year-to-Date) by fiscal year. 
+
+Since each firm can have different quarter to end the fiscal year, it is a very good idea to calculate quarterly amounts from the YTD cumulative amounts.
+
+Remember that the YTD amount is a cumulative amount from the first fiscal quarter up to any fiscal quarter. Then, what might be the algorithm to create the quarter-amount EBIT ? 
+
+**CHALLENGE 1 - WRITE YOUR ALGORITHM WITH YOUR OWN WORDS, AND WRITE THE R CODE TO CREATE THE QUARTERLY EBIT AMOUNT IN THE USPANEL DATASET**
+
+
+# Brief descriptive statistics
+
+We can use the dplyr package to get important descriptive statistics for the US firms. Since we have a panel data, we can select only the last quarter of 2020 and then get a list of firms and calculate important descriptive statistics about the sample.
+
+# CHALLENGE 2 - Creating a cross-sectional dataset
+
+For all firms in the dataset, you have to select quarter with the last complete fiscal annual data (fiscal year=2022 and fiscalmonth=12)
+
+If we do descriptive statistics with the panel data, the information will be repeated since we have many rows for the same company. We need to have a cross-sectional data where the information of 1 firm is only in 1 row of the dataset.
+
+In the panel data we have 4 quarters for each year. In the US, most of the firms end the fiscal year in the Q4, however there are few firms that end the fiscal year in the other 3 quarters. To identify for each firm when the fiscal year ends, there is a column in the dataset called fiscalmonth. If the fiscalmonth=12, that means that that quarter is the end of the corresponding fiscal year.
+
+The last complete fiscal year in the dataset is 2022 (actually, it is the most recent we have available). Then, we can select only those rows with yearF=2022 and fiscalmonth=12 to end up with the last fiscal quarter for each firm.
+
+**CHALLENGE 2 - Write R code to create this cross-sectional dataset (name the dataset as data2022**  
+
+
+# CHALLENGE 3 - PASTE THE INDUSTRY INTO THE USPANEL AND THE DATA2022 DATASETS
+
+For the uspanel and the data2022 datasets, you have to add a column with the industry name (naics1 code). Remember that the industry along with firm name and other variables are in the firms2023 dataset.
+
+**WRITE DE R CODE FOR THIS MERGE FOR BOTH DATASETS** You can use the merge or the left_join function. 
+
+# CHALLENGE 4 - DESCRIPTIVE STATISTICS OF MARKET VALUE BY INDUSTRY
+
+Using the data2022, calculate the market value for all firms. Show a table by INDUSTRY to show the # of firms in the industry along with the Q1, median, and Q3 of market value by INDUSTRY. 
+
+**CHALLENGE 4 - WRITE THE R CODE TO SHOW # OF FIRMS, Q1, MEDIAN AND Q3 BY INDUSTRY** 
+
+# CHALLENGE 5 - CALCULATE VARIABLES FOR THE MODEL 
+
+Using the historical uspanel dataset, calculate:
+
+- Market value = originalprice * sharesoutstanding
+- oepsp = Operational Earnings per Share divided by price = (EBITQ/sharesoutstanding) / originalprice
+- r = Annual stock return (log return) 
+
+You can use dplyr package for these variables.
+Remember that EBITQ is the Quarterly EBIT you calculated in Challenge 1.
+
+
+```{r, echo=FALSE}
+uspanel <- uspanel %>%
+  mutate(ebit = revenue - cogs - sgae)
+
+uspanel1 <- uspanel %>%
+  group_by(firm) %>%
+  mutate(ebitq = ifelse(fiscalmonth==3,ebit,ebit - lag(ebit))) %>%
+  ungroup()
+
+uspanel1 <- uspanel1 %>%
+  group_by(firm) %>%
+  mutate(r = log(adjprice) - lag(log(adjprice),4), 
+         F1r = lead(r))
+
+
+```
+
+
+**CHALLENGE 5: WRITE THE R CODE TO CALCULATE THESE VARIABLES**
+
+
+# CHALLENGE 6 - WINSORIZE THE OPERATING EPSP
+
+**CHALLENGE 6 - Apply winsorization to the oepsp variable. Use the statar package to automatically wisorize the variable and a histogram of the winsorized oepsp.** 
+
+# CHALLENGE 7 - RUN A LOGIT MODEL TO PREDICT PROBABILITY OF BEATING THE INDUSTRY
+
+**CHALLENGE 7 - USING THE glm FUNCTION, RUN A LOGISTIC MODEL TO EXAMINE WHETHER oepspw HAS EXPLANATORY POWER TO THE PROBABILITY OF A STOCK BEATING THE MEDIAN INDUSTRY RETURN**
+
+# CHALLENGE 8 - INTERPRET THE LOGIT MODEL
+
+**CHALLENGE 8- INTERPRET WITH YOUR WORDS THE LOGIT MODEL**
+
+# Datacamp online courses and other materials
+
+You will receive an email invitation to register in datacamp.com. Datacamp is one of the best online learning sites for Data Science applied to Business and Finance.
+
+You will receive **free access** for the whole semester! Accept the invitation to be registered in Datacamp.
+
+You can get official certificates from Datacamp and post them in your Linkedin profile!
+
+It is recommended that you take/review the following chapters:
+
+-   Chapters 1 to 3 of the course: **Introduction to tidyverse**
+
+-   Chapter "Logistic Regression" of the course: **Credit Risk Modeling in R**
+
+Last year (Oct 25, 2022), Max Kuhn and Julia Silge published an online **free book: [Tidy Modeling with R](https://www.tmwr.org/).** Max Kuhn has written R packages such as caret. I strongly recommend it!
+
+# W1 submission
+
+The grade of this Workshop will be the following:
+
+-   Complete (100%): If you submit an ORIGINAL and COMPLETE HTML file with all the activities, with your notes, and with your OWN RESPONSES to questions
+
+-   Incomplete (75%): If you submit an ORIGINAL HTML file with ALL the activities but you did NOT RESPOND to the questions and/or you did not do all activities and respond to some of the questions.
+
+-   Very Incomplete (10%-70%): If you complete from 10% to 75% of the workshop or you completed more but parts of your work is a copy-paste from other workshops.
+
+-   Not submitted (0%)
+
+Remember that you have to submit your .html file through Canvas BEFORE THE FIRST CLASS OF NEXT WEEK.

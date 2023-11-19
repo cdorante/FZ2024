@@ -1,0 +1,484 @@
+---
+title: "Workshop 2, Financial Modeling and Programming"
+author: "Alberto Dorantes, Ph.D."
+date: "Nov 7, 2022"
+
+abstract: "This is an INDIVIDUAL workshop. In this workshop we review the market regression model to calculate aplha and beta, and also we learn how to run the model many times using a loop. We use the results of alpha and beta to select stocks." 
+
+format: 
+  html:
+    toc: true
+    toc-title: Content    
+    toc-location: left
+    toc-float: true
+    theme: united
+    highlight-style: zenburn
+    number-sections: true
+    fontsize: 0.9em
+    html-math-method: katex
+    
+knitr:
+  opts_chunk: 
+    warning: false
+    message: false
+---
+
+```{r global_options}
+#| include: false 
+#| warning: false
+#| message: false
+#| fig-width: 12
+#| fig-height: 8
+
+#knitr::opts_chunk$set(fig.width=12, fig.height=8, fig.path='Figs/',
+#                      warning=FALSE, message=FALSE)
+```
+
+# General directions for this Workshop
+
+Using an RNotebook you have to:
+
+-   Replicate all the R Code along with its output.
+
+-   You have to do whatever is asked in the workshop. It can be: a) Responses to specific **questions** and/or do an **exercise/challenge**.
+
+Any **QUESTION** or any **INTERPRETATION** you need to do will be written in **CAPITAL LETTERS**. For ANY QUESTION or INTERPRETATION, you have to RESPOND IN CAPITAL LETTERS right after the question.
+
+-   It is STRONGLY RECOMMENDED that you write your OWN NOTES as if this were your personal notebook. Your own workshop/notebook will be very helpful for your further study.
+
+You have to submit ONLY the .html version of your .Rmd file.
+
+# The Linear regression model
+
+The simple linear regression model is used to understand the linear relationship between two variables assuming that one variable, the independent variable (IV), can be used as a predictor of the other variable, the dependent variable (DV). In this part we illustrate a simple regression model with the Market Model.
+
+The Market Model states that the expected return of a stock is given by its alpha coefficient (b0) plus its market beta coefficient (b1) multiplied times the market return. In mathematical terms:
+
+$$ E[R_i] = α + β(R_M) $$
+
+We can express the same equation using B0 as alpha, and B1 as market beta:
+
+$$ E[R_i] = β_0 + β_1(R_M) $$
+
+We can estimate the alpha and market beta coefficient by running a simple linear regression model specifying that the market return is the independent variable and the stock return is the dependent variable. It is strongly recommended to use continuously compounded returns instead of simple returns to estimate the market regression model. The market regression model can be expressed as:
+
+$$ r_{(i,t)} = b_0 + b_1*r_{(M,t)} + ε_t $$
+
+Where:
+
+$ε_t$ is the error at time t. Thanks to the Central Limit Theorem, this error behaves like a Normal distributed random variable ∼ N(0, $σ_ε$); the error term $ε_t$ is expected to have mean=0 and a specific standard deviation $σ_ε$ (also called volatility).
+
+$r_{(i,t)}$ is the return of the stock i at time t.
+
+$r_{(M,t)}$ is the market return at time t.
+
+$b_0$ and $b_1$ are called regression coefficients.
+
+# Running a market regression model with real data
+
+## Data collection
+
+We first load the quantmod package and download monthly price data for Tesla and the S&P500 market index. We also merge both datasets into one:
+
+```{r message=FALSE, warning=FALSE}
+# load package quantmod
+library(quantmod)
+
+# Download the data
+getSymbols(c("TSLA", "^GSPC"), from="2019-01-01", to= "2022-10-31", periodicity="monthly")
+
+#Merge both xts-zoo objects into one dataset, but selecting only adjusted prices:
+
+adjprices<-Ad(merge(TSLA,GSPC))
+
+```
+
+## Return calculation
+
+We calculate continuously returns for both, Tesla and the S&P500:
+
+```{r}
+returns <- diff(log(adjprices)) 
+#I dropped the na's:
+returns <- na.omit(returns)
+
+#I renamed the columns:
+colnames(returns) <- c("TSLA", "GSPC")
+
+```
+
+## Visualize the relationship
+
+Do a scatter plot putting the S&P500 returns as the independent variable (X) and the stock return as the dependent variable (Y). We also add a line that better represents the relationship between the stock returns and the market returns.Type:
+
+```{r}
+plot.default(x=returns$GSPC,y=returns$TSLA)
+abline(lm(returns$TSLA ~ returns$GSPC),col='blue')
+# As you see, I indicated that the Market returns goes in the X axis and 
+#   Tesla returns in the Y axis. 
+# In the market model, the independent variable is the market returns, while
+#   the dependent variable is the stock return
+
+```
+
+Sometimes graphs can be deceiving. Always check the Y sale and the X scale. In this case, the X goes from -0.10 to 0.10, while the Y scale goes from -0.20 to 0.40. Then, the real slope of the line should be steeper.
+
+We can change the X scale so that both Y and X axis have similar ranges:
+
+```{r}
+# I indicate that X axis goes from -0.7 to 0.7
+plot.default(x=returns$GSPC,y=returns$TSLA, xlim=c(-0.7,0.7))
+abline(lm(returns$TSLA ~ returns$GSPC),col='blue')
+
+```
+
+Now we see that the the market and stock returns have a similar scale. With this we can better appreciate their linear relationship.
+
+**WHAT DOES THE PLOT TELL YOU? BRIEFLY EXPLAIN**
+
+## Running the market regression model
+
+We can run the market regression model with the lm() function. The first parameter of the function is the DEPENDENT VARIABLE (in this case, the stock return), and the second parameter must be the INDEPENDENT VARIABLE, also named the EXPLANATORY VARIABLE (in this case, the market return).
+
+What you will get is called The Market Regression Model. You are trying to examine how the market returns can explain stock returns from Jan 2017 to Dec 2020.
+
+Assign your market model to an object named "model1":
+
+```{r}
+model1 <- lm(TSLA ~ GSPC, data=returns)
+summary(model1)
+```
+
+**YOU HAVE TO INTERPRET THIS MODEL. MAKE SURE YOU RESPOND THE FOLLOWING THE QUESTIONS:**
+
+**- IS THE STOCK SIGNIFICANTLY OFFERING RETURNS OVER THE MARKET?**
+
+**- IS THE STOCK SIGNIFICANTLY RISKIER THAN THE MARKET?**
+
+We can save the regression summary in another variable and display the regression coefficients:
+
+```{r}
+s <-summary(model1)
+s$coefficients
+
+```
+
+The beta0 coefficient is in the first row (the intercept), while the beta1 coefficient is in the second raw.
+
+The regression coefficients will be in the first column of this matrix. The second column is the standard error of the coefficients, which are the standard deviation of the coefficients. The third column is the t-value of each coefficient, and finally their p-values in the fourth column.
+
+We can get beta0, beta1, standard errors, t-values and p-values and store in other variables:
+
+```{r}
+b0= s$coefficients[1,1]
+b1= s$coefficients[2,1]
+
+stderr_b0 = s$coefficients[1,2]
+stderr_b1 = s$coefficients[2,2]
+
+tval_b0 = s$coefficients[1,3]
+tval_b1 = s$coefficients[2,3]
+
+pvalue_b0 = s$coefficients[1,4]
+pvalue_b1 = s$coefficients[2,4]
+
+```
+
+The reference \[2,1\] of the matrix s\$coefficients means that I want to get the element of the matrix that is in the row #2 and the column #1. In this position we can find the beta1 of the model.
+
+Then, any R matrix you can make reference as matrix\[#row,#column\] to get the value of any cell according to its position in row and column numbers.
+
+We can also get the coefficients applying the function coef to the regression object:
+
+```{r}
+coefs <- coef(model1)
+coefs
+
+b0 = coefs[1]
+b1 = coefs[2]
+```
+
+# Automating the calculation of market models for many stocks
+
+## Automating downloading and return calculation
+
+If we want to analyze the market risk of many stocks, we need to calculate the market model for many stocks. The challenge here will be to automate the process of estimating market models for any list of tickers.
+
+Let's start with an easy example of 2 stocks:
+
+Here we will learn how to automate the downloading of many stock prices and calculate returns starting with a definition of a set of tickers.
+
+We define a vector with the tickers for Oracle, Netflix, and the S&P500, and download the monthly stock prices:
+
+```{r}
+# Set the ticker ^GSPC as GSPC (previously defined name)
+# The seSymbolLookup function helps to avoid having problems with tickers
+#   with special characters such as ^GSPC
+setSymbolLookup(GSPC = list(name="^GSPC"))
+#Now I can keep using the ticker without the ^character, which sometimes 
+#   cause problems
+
+# I define a list of tickers including the market index GSPC:
+tickers <- c("ORCL","NFLX", "GSPC")
+
+# I get monthly data for the 3 tickers:
+getSymbols(tickers, periodicity = "monthly",
+             from = "2019-01-01", to = "2022-10-31")
+```
+
+We can *clone* a dataset with the get function:
+
+```{r}
+mktindex <- get("GSPC")
+```
+
+The get function receives a name of a dataset and then create a new dataset.
+
+Now mktindex is a clone of the GSPC dataset. Why this can be useful?
+
+As programmers, sometimes we do not know which stocks (tickers) we will be using in our program. Then, it is a good idea to find a way to clone a dataset that has a specific name, which can be any ticker name.
+
+We can clone 2 datasets as data1 and data2 for the stocks:
+
+```{r}
+data1 = get("ORCL")
+data2 = get("NFLX")
+```
+
+To avoid writing one get function for each ticker, we can use the lapply function, which applies a function to a list of elements of a vector.
+
+We apply the get function to the tickers vector:
+
+```{r}
+datasets_list <- lapply(tickers, get)
+
+```
+
+Now we have the 3 datasets inside a list; each element of the list is an xts dataset with the stock price data.
+
+We can see the content of the first dataset:
+
+```{r}
+head(datasets_list[[1]])
+```
+
+We can merge the 3 datasets into one with merge:
+
+```{r}
+prices<-merge(datasets_list[[1]], datasets_list[[2]], datasets_list[[3]])
+```
+
+Another faster way to do this is using the do.call function, which runs a function like merge with more than 1 argument:
+
+```{r}
+prices <- do.call(merge, datasets_list)
+```
+
+I do this to generalize our program for any number of tickers! The do.call function is similar to the lapply function. For the do.call function, the first argument is the function, and the second argument is the list of datasets.
+
+Now I select adjusted prices and name the columns with the ticker names:
+
+```{r}
+# We select only Adjusted prices:
+prices <- Ad(prices)
+# We change the name of the columns to be equal to the tickers vector:
+names(prices)<-tickers
+```
+
+With this code, you can change the list of tickers from 2 to any set of tickers, and you will end up with a clean dataset of only adjusted prices for all the tickers.
+
+Another much efficient way to do the previous data management is using **tidyverse**. Let's see a chunk that performs all the previous processes from getSymbols to merge:
+
+```{r}
+library(tidyverse)
+setSymbolLookup(GSPC = list(name="^GSPC"))
+tickers <- c("ORCL","NFLX", "AMD" , "AAPL", "PG", "MSFT", "VRTX", "TMO", "TSLA", "GOOGL", "GSPC")
+
+prices2 <- getSymbols(tickers,periodicity = "monthly",
+             from = "2019-01-01", to = "2022-10-31") %>%
+  map(~Ad(get(.))) %>%
+  reduce(merge) %>%
+  `colnames<-`(tickers)
+
+prices2 <- Ad(prices2)
+# We change the name of the columns to be equal to the tickers vector:
+
+datasets_list <- lapply(tickers, get)
+prices <- do.call(merge, datasets_list)
+prices = Ad(prices)
+colnames(prices)<-tickers
+
+```
+
+prices2 dataset will be exactly the same as prices.
+
+Can you follow the logic of this chunk?
+
+Now we calculate continuously compounded returns for all tickers:
+
+```{r}
+returns <- na.omit(diff(log(prices)))
+```
+
+## Running manually the market model for 2 stocks
+
+Now we can run the market model for both stocks manually:
+
+```{r}
+model1 <- lm(returns$ORCL ~ returns$GSPC)
+summary(model1)
+model2 <- lm(returns$NFLX ~ returns$GSPC)
+summary(model2)
+
+```
+
+We can also run these models using the reference of the columns:
+
+```{r}
+# Since ORCL is in the 1st column, and the GSPC index in the 3rd column:
+model1 <- lm(returns[,1] ~ returns[,3])
+# Since NFLX is in the 2nd column, and the GSPC index in the 3rd column:
+model2 <- lm(returns[,2] ~ returns[,3])
+summary(model1)
+summary(model2)
+```
+
+The only thing that changes in the lm models is the column name used for the dependent variable (1 or 2); the rest of the parameters is exactly the same.
+
+How can we run these models using a loop?
+
+A loop helps us to execute a set of commands many times. Let's see this example:
+
+```{r}
+# Inicializo un vector/matriz a nulo
+betas =c()
+for (i in 1:10) {
+  model <- lm(returns[,i] ~ returns[,11])
+  #print(summary(model))
+  smodel = summary(model)
+  b0 = smodel$coefficients[1,1]
+  b1 = smodel$coefficients[2,1]
+  seb0 = smodel$coefficients[1,2]
+  seb1 =smodel$coefficients[2,2]
+  pb0 = smodel$coefficients[1,4]
+  pb1 = smodel$coefficients[2,4]
+  
+  betas = rbind(betas,c(b0,b1,seb0,seb1,pb0,pb1)) 
+}
+rownames(betas) = tickers[1:10]
+colnames(betas) =c("b0","b1","seb0","seb1","pvalueb0","pvalueb1")
+betas
+betasdf = data.frame(betas)
+```
+
+```{r}
+library(dplyr)
+seleccion1 <- betasdf %>% 
+          arrange(desc(b0)) %>% 
+          head(8)
+
+seleccion2 <- seleccion1 %>% 
+         arrange(b1) %>%
+         head(6)
+
+seleccion3 <- seleccion2 %>%
+        arrange(seb1) %>%
+        head(4)
+
+besttickers = rownames(seleccion3)
+besttickers
+
+
+
+
+```
+
+
+
+# Use a Loop to generate information and store it in a Matrix.
+
+An analyst made an analysis and tells you that financial leverage has a negative quadratic effect on the expected financial performance. This is a typical inverted U-shaped relationship. In other words, financial leverage has a positive effect on performance up to a certain level of leverage; after this level the relationship becomes negative: the more financial leverage, the less the firm performance. The equation is the following:
+
+$$
+Performance=20-(leverage-4)^{2}
+$$ Leverage is measure from level 0 (no leverage) up to the maximum leverage =10. Calculate the expected firm performance for leverage levels 0 to 10 and store the results in a matrix:
+
+```{r}
+# I initialize the matrix as empty:
+matrix_results = c()
+# I loop over i that will take values from 0 to 1 jumping by 1:
+for (i in seq(from=0,to=10, by=1)) {
+  # I calculate the performance according to the leverage level i:
+  performance = 20 - (i - 4)^2
+  # I put the leverage and performance in a vector:
+  result = c(i,performance)
+  # I append/ attach the result vector to the matrix
+  # rbind stands for row bind, so I attach the result vector as a row below to whatever the matrix has 
+  #   at the moment of the iteration
+  matrix_results = rbind(matrix_results,result)
+}
+# I change the matrix to a data frame; data frames have advantages compared to matrices
+
+matrix_results = as.data.frame(matrix_results)
+# I set the names for the columns:
+names(matrix_results) = c("leverage","performance")
+matrix_results
+# plotting performance for different leverage levels:
+plot(x=matrix_results$leverage, y=matrix_results$performance)
+
+```
+
+Imagine that I want to select only those cases where performance was positive. I can do a selection of a data frame as follows:
+
+```{r}
+library(dplyr)
+selected_cases <- matrix_results %>%
+      filter(performance>0)
+selected_cases
+```
+
+# CHALLENGE 1
+
+The problem here is that we run both models to create the linear regressions, but we only displayed the models, but did not save the beta information for each stock. Adjust the loop of section 4.2 to store the data in a matrix that contains B0, and B1 coefficients, standard errors and PValues for each company.
+
+Answer the following questions: HOW CAN WE STORE THIS INFORMATION FOR BOTH STOCKS? WHICH STRUCTURE CAN YOU USE?
+
+HOW CAN YOU SELECT THOSE STOCKS THAT HAVE A SIGNIFICANT BETA0, GREATER THA ZERO?
+
+# CHALLENGE 2
+
+Based on the preliminary selection of 100 stocks on the Challenge of workshop 1:
+
+1.  Create a list with the ticker of each company
+
+2.  Using a Loop, generate the market model for each company and store the data
+
+3.  Based on the data of each company select a set of 10 companies based on any of these criteria:
+
+    1.  CRITERIA A: Stocks that are SIGNIFICANTLY offering returns over the market
+
+    2.  CRITERIA B: Stocks that are SIGNIFICANTLY less risky than the market according to the market model regressions.
+
+**On the following phases of the problem setup, you will be generating the portfolios with this stocks.**
+
+# Datacamp online courses
+
+It is recommended that you take/review the following chapters:
+
+-   Course: Intermediate R for Finance, chapter: Loops
+
+-   Course: Introduction to Regression in R
+
+# W2 submission
+
+The grade of this Workshop will be the following:
+
+-   Complete (100%): If you submit an ORIGINAL and COMPLETE HTML file with all the activities, with your notes, and with your OWN RESPONSES to questions
+
+-   Incomplete (75%): If you submit an ORIGINAL HTML file with ALL the activities but you did NOT RESPOND to the questions and/or you did not do all activities and respond to some of the questions.
+
+-   Very Incomplete (10%-70%): If you complete from 10% to 75% of the workshop or you completed more but parts of your work is a copy-paste from other workshops.
+
+-   Not submitted (0%)
+
+Remember that you have to submit your .html file through Canvas BEFORE THE FIRST CLASS OF NEXT WEEK.
