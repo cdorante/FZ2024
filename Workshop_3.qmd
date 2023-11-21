@@ -1,0 +1,908 @@
+---
+title: "Workshop 3, Financial Modeling and Programming"
+author: "Alberto Dorantes, Ph.D."
+date: "Nov 13, 2023"
+
+abstract: "This is an INDIVIDUAL workshop. In this workshop we review the basics of portfolio theory and portfolio optimization. We learn how to program estimations for portfolio return and risk, and portfolio optimization."
+
+format: 
+  html:
+    toc: true
+    toc-title: Content    
+    toc-location: left
+    toc-float: true
+    theme: united
+    highlight-style: zenburn
+    number-sections: true
+    fontsize: 0.9em
+    html-math-method: katex
+    
+knitr:
+  opts_chunk: 
+    warning: false
+    message: false
+---
+
+```{r global_options}
+#| include: false 
+#| warning: false
+#| message: false
+#| fig-width: 12
+#| fig-height: 8
+
+#knitr::opts_chunk$set(fig.width=12, fig.height=8, fig.path='Figs/',
+#                      warning=FALSE, message=FALSE)
+```
+
+```{r}
+#| echo: false
+library(kableExtra)
+```
+
+# General directions for this Workshop
+
+Using an RNotebook you have to:
+
+-   Replicate all the R Code along with its output.
+
+-   You have to do whatever is asked in the workshop. It can be: a) Responses to specific **questions** and/or do an **exercise/challenge**.
+
+Any **QUESTION** or any **INTERPRETATION** you need to do will be written in **CAPITAL LETTERS**. For ANY QUESTION or INTERPRETATION, you have to RESPOND IN CAPITAL LETTERS right after the question.
+
+-   It is STRONGLY RECOMMENDED that you write your OWN NOTES as if this were your personal notebook. Your own workshop/notebook will be very helpful for your further study.
+
+You have to submit ONLY the .html version of your .Rmd file.
+
+# What is a Portfolio?
+
+A portfolio is a set of 2 or more financial assets. A financial asset can of any type such as stock, bond, risk-free instrument, derivative, commodity. The portfolio owner needs to decide how much money allocate to each individual asset. The main advantage of financial portfolios is the possibility to diversify risk, while maintaining an expected rate of return.
+
+In this workshop we review practical easy examples of 2-asset and 3-asset portfolios with the purpose to illustrate portfolio theory and portfolio optimization.
+
+It is recommended that you review the lecture notes posted in the course site where portfolio theory, matrix algebra, and portfolio optimization are explain in more detail.
+
+# Calculating historical returns and risk of a portfolio
+
+## Historical return of a portfolio
+
+Let's start with an example of calculating historical returns of a 2-asset portfolio. Imagine that we want to calculate how much return you would have realized if you had invested in the following portfolio between January 2019 to December 2020:
+
+Wal Mart: 70%
+
+Tesla: 30%
+
+We start downloading historical monthly prices from Yahoo Finance:
+
+```{r}
+library(quantmod)
+rm(list=ls())
+tickers = c("WMT","TSLA")
+getSymbols(Symbols = tickers, periodicity="monthly",from="2020-01-01", to="2023-10-31")
+
+datasets_list <- lapply(tickers, get)
+
+```
+
+Now we merge all datasets using the function call. I do this to generalize our program for any number of tickers:
+
+```{r}
+prices <- do.call(merge, datasets_list)
+# We select only Adjusted prices:
+prices <- Ad(prices)
+
+# We change the name of the columns to be equal to the tickers vector:
+names(prices) = tickers
+```
+
+We calculate holding period returns for both stocks. We can divide the price of each stock by its own price in the first month and then subtract 1:
+
+```{r}
+
+firstprices = as.vector(prices[1,])
+
+HPR = sweep(prices,2,firstprices,'/') - 1
+
+#Also, the HPR can be calculated in the prices dataset as:
+#prices$HPRWMT = prices$WMT / as.numeric(prices$WMT[1]) - 1 
+#prices$HPRTSLA = prices$TSLA / as.numeric(prices$TSLA[1]) - 1 
+
+```
+
+The sweep function divides each row of prices by the fistprices vector. The parameter 2 indicates that the division is by row.
+
+We set the weight for each stock to form a portfolio:
+
+```{r}
+w1 = 0.70
+w2 = 0.30
+
+```
+
+The holding period return for each month of this portfolio would be the weighted average of the holding period stock returns:
+
+$$
+PortfolioHPR_t=0.7*HPR1_t+0.3*HPR2_t
+$$ At the end of the first month the weights assigned to each stock will change depending on the return of each stock. For example, if stock 1 had a much higher return than stock 2, then the weight w1 will increase to more than 70% and weight w2 will be less than 30%.
+
+We can calculate the holding portfolio return as follows:
+
+```{r}
+HPR$Port = w1 * HPR$WMT + w2 * HPR$TSLA
+```
+
+The historical holding portfolio monthly return would look like:
+
+```{r}
+plot(HPR$Port)
+```
+
+We can calculate how much \$1 invested in our portfolio would have grew over time. We can use the HPR of the portfolio and add 1 to get a growth factor for each month:
+
+```{r}
+
+HPR$invport = 1 * (1+HPR$Port)
+
+plot(HPR$invport)
+```
+
+We can do the previous portfolio return calculations and the same plot using the PerformanceAnalytics package:
+
+```{r}
+library(PerformanceAnalytics)
+# I create a vector with the portfolio weights:
+w = c(w1,w2)
+
+# I create the monthly return for each stock:
+
+R = prices / lag(prices,1) - 1 
+
+# I calculate the portfolio historical returns using the weight vector and the stock historical returns:
+PR <- Return.portfolio(R,weights=w)
+
+# The charts.PerformanceSummary function calculates and plots the $1.0 performance invested in the portfolio:
+charts.PerformanceSummary(PR, 
+                          main = "Performance of $1.00 over time",
+                          wealth.index = TRUE)
+
+```
+
+This plot shows the same portfolio performance than the previous one, but with this we can also see the monthly return and the *drowdowns*, which are the negative % declines over time.
+
+## Historical risk (volatility) of a portfolio
+
+The historical risk of a portfolio can be measured with the standard deviation of the portfolio historical period returns. Another important measure for portfolio risk is Value at Risk, but we will not cover that measure in this workshop.
+
+I recommend to use the continuously compounded (cc) returns to calculate the standard deviation of returns. The main reason is that cc returns behave more like a normal distribution, and also because cc returns are more conservative measure than simple returns: for negative returns, cc returns have higher magnitude, and for positive returns, cc returns are less than simple returns.
+
+Then, we can calculate the cc returns of the monthly portfolio returns as follows. We can use the monthly returns calculated by the Return.Portfolio function and convert it to continuously compounded returns:
+
+```{r}
+pr = log(1+PR$portfolio.returns) 
+```
+
+Now we can use the table.Stats from PeformanceAnalytics to quickly calculate the standard deviation and also other important descriptive statistics of returns:
+
+```{r}
+returns_statistics = table.Stats(pr)
+returns_statistics
+returns_statistics["Stdev",]
+```
+
+Also we can use the sd and the mean function:
+
+```{r}
+portfolio_volatility = sd(pr,na.rm = TRUE)
+portfolio_volatility 
+
+portfolio_mean_return = mean(pr,na.rm=TRUE)
+portfolio_mean_return
+```
+
+Remember that in Finance, the standard deviation of returns is usually called volatility.
+
+We can say that the monthly volatility of this portfolio composed of 70% of Wal Mart and 30% of Tesla calculated from 2018 up to Oct 2022 was `r 100*portfolio_volatility`%.
+
+We can complement this including the mean historical return of the portfolio. We can say that this portfolio had an average monthly return of `r 100*portfolio_mean_return`%, and a monthly volatility of `r 100*portfolio_volatility`%.
+
+We can also appreciate the historical risk of a portfolio if we do a Box Plot of its monthly returns:
+
+```{r}
+chart.Boxplot(PR)
+```
+
+We can compare this portfolio risk with the individual stock risk:
+
+```{r}
+chart.Boxplot(merge(R,PR))
+```
+
+The box contains the returns between the quartile 1 (Q1) and the quartile 3 (Q3), while the mean return is the red point and the mdian (Q2) is the mid vertical line.
+
+Can you appreciate the risk of the stocks and the portfolio?
+
+It is very important to be aware of the *granularity* of the historical data used to calculate volatility and mean returns. Granularity of a dataset refers to the frequency of periods. In this case, we are using monthly returns, so the granularity is monthly.
+
+Then, we can have a better interpretation of portfolio volatility and portfolio return if we convert both values from monthly to annual. It is very common to report annual mean portfolio return and annual portfolio volatility based on monthly data.
+
+To convert monthly portfolio mean return to annual portfolio mean return, we just multiply the monthly average return times 12:
+
+```{r}
+annual_portfolio_mean_return = 12 * portfolio_mean_return
+annual_portfolio_mean_return
+```
+
+However, to convert from monthly to annual volatility, we need to multiply by the square root of the numbers of the periods in the year, in this case, 12:
+
+```{r}
+annual_portfolio_volatility = sqrt(12) * portfolio_volatility
+annual_portfolio_volatility
+```
+
+Now we can do a better interpretation using these annual figures:
+
+**We can say that this portfolio had an average annual return of `r 100*annual_portfolio_mean_return`%, and an annual volatility of `r 100*annual_portfolio_volatility`%.**
+
+In the following sections we review what is variance and standard deviation of returns, and how they are calculated (without using a function)
+
+### What is variance of returns?
+
+Variance of any variable is actually the **arithmetic mean** of **squared deviations**. A squared deviation is the value resulting from subtracting the value of the variable minus its mean, and the square the value.
+
+The mean of returns is estimated as:
+
+$$
+\bar{r}  =\frac{r_{1}+r_{2}+...+r_{N}}{N}
+$$
+
+The variance is estimated as:
+
+$$
+VAR(r)=\frac{(r_{1}-\bar{r})^{2}+(r_{2}-\bar{r})^{2}+...+(r_{N}-\bar{r})^{2}}{N}
+$$
+
+Variance is a measure of dispersion. The higher the variance, the more dispersed the values from its mean. It is hard to interpret the magnitude of variance. That is the reason why we need to calculate standard deviation, which is basically the squared root of the variance.
+
+### What is standard deviation?
+
+Standard deviation of a variable is the squared root of the variance of the variable:
+
+$$
+SD(r)=\sqrt{VAR(r)}
+$$ Then, **the standard deviation of returns can be interpreted as a standardized average distance from each value of the variable from its mean.**
+
+The standard deviation of returns is called volatility. Then, volatility of returns tells us an idea of how much on average (above or below) the period returns move from its mean.
+
+We can calculate volatility of a single stock, or volatility of a portfolio composed of 2 or more stocks.
+
+## Historical Sharpe ratio of a portfolio
+
+The Sharpe ratio is a standardized measure of portfolio premium return after considering its volatility.
+
+A premium return is the return above the risk-free rate. In Mexico the risk-free rate is the CETES; in the US, the risk-free rate is the Treasury Bills.
+
+Then, the Sharpe ratio tells us **how much portfolio returns (above the risk free rate) we can expect for each percent point of volatility.** Let's see the formula:
+
+$$
+SharpeRatio=\frac{(PortfolioReturn-riskfreeRate)}{PortfolioVolatility}
+$$
+
+# Calculating expected portfolio return
+
+Up to now we have calculated **historical** portfolio returns and risk. Here we review how to estimate future expected portfolio returns and risk based on Portfolio Theory developed by Harry Markowitz.
+
+## Calculating expected asset return
+
+We will use the simpler method to estimate the expected return of each stock, which is the geometric mean of historical returns. Other methods to estimate expected stock return are a) the CAPM regression model, b) ARIMA models.
+
+The geometric mean of historical returns is the average period return needed so that holding an investment at that geometric mean return per period, we will get the final holding return of the stock.
+
+The mathematical formula of geometric mean return is:
+
+$$
+GeomMean(R)=\sqrt[N]{(1+R_{1})(1+R_{2})...(1+R_{N})}-1
+$$ Where $R_t$ is the historical return for period t. In this formula we have N historical periods (can be months)
+
+Another easier way to calculate geometric mean of returns is to calculate the arithmetic mean of continuously compounded returns, and then convert the result to simple return by applying the exponential function:
+
+$$
+GeomMean(R)=e^{\bar{r}}-1
+$$ Where $\bar{r}$ is the arithmetic mean of historical returns:
+
+$$
+\bar{r}=\frac{r_{1}+r_{2}+...+r_{N}}{N}
+$$
+
+Let's do an example. Calculate the expected monthly return of Wal Mart and Tesla using the same historical data from 2018 to Oct 2022.
+
+We need to calculate the continuously compounded returns of each stock:
+
+```{r}
+#Calculating continuously compounded returns:
+r = diff(log(prices))
+
+```
+
+Now we get the expected return for each stock as the geometric mean of their historical returns:
+
+```{r}
+ccmean_returns  = colMeans(r,na.rm=TRUE)
+```
+
+colMeans calculate the arithmetic mean of 1 or more columns of a dataset.
+
+Once we have the arithmetic mean cc returns, we convert them to simple returns:
+
+```{r}
+ER = exp(ccmean_returns) - 1
+ER
+```
+
+Now that we have individual expected returns we can estimate the expected return of a portfolio composed of the stocks.
+
+## Calculating expected portfolio return
+
+The expected portfolio returns is the weighted average of the individual expected return of the stocks of the portfolio.
+
+Imagine we have a 2-stock portfolio composed as follows:
+
+WalMart: 70%
+
+Tesla: 30%
+
+### Method 1: weighted average using a sum of products
+
+We use the weights (%) allocated for each asset to calculate the weighted average as the portfolio expected return:
+
+```{r}
+w1 = 0.7
+w2 = 0.3
+ER_Portfolio = w1 * ER[1] + w2 * ER[2]
+#  ER is a vector of 2 numbers: the expected return of stock 1 and the expected return of stock 2 
+names(ER_Portfolio)=c("ER_Portfolio")
+ER_Portfolio
+```
+
+Then, the expected return of this portfolio for the future month is `r 100*ER_Portfolio`%.
+
+### Method 2: weighted average using matrix algebra
+
+Another way to calculate the expected return of a portfolio is using matrix algebra. This is a very useful method when we have many assets in the portfolio since it is very easy to compute.
+
+If you do not remember how to multiply matrices, it is strongly recommended to review this (you can read Note 2 of Portfolio Theory).
+
+Matrix multiplication is used to compute **sum of products** or sum of multiplications.
+
+For example, the way to estimate the expected return of our portfolio is the following:
+
+$$
+ERPort=t\left(W\right)*ER
+$$
+
+$$
+ERPort=\begin{bmatrix}w_{1} & w_{2}\end{bmatrix}*\begin{bmatrix}ER_{1}\\
+ER_{2}
+\end{bmatrix}
+$$
+
+We compute this in R as follows:
+
+```{r}
+# We set a vector composed of the asset weights:
+W = c(w1,w2)
+# We multiply the transpose of the weight vector times the vector of expected returns
+ER_portfolio = t(W) %*% ER
+ER_portfolio
+```
+
+The transposed of a matrix or a vector is the conversion of the rows by columns and columns by rows. Transposing is like rotating a vector or a matrix 90 degrees:
+
+$$
+t\left(\left[\begin{array}{c}
+w_1\\
+w_2
+\end{array}\right]\right)=\left[\begin{array}{cc}
+w_1 & w_2\end{array}\right]
+$$
+
+Then, the previous matrix multiplication was:
+
+$$
+\begin{bmatrix}w_{1} & w_{2}\end{bmatrix}*\begin{bmatrix}ER_{1}\\
+ER_{2}
+\end{bmatrix}
+$$
+
+$$
+\begin{bmatrix}0.7 & 0.3\end{bmatrix}*\begin{bmatrix}0.00775\\
+0.05588
+\end{bmatrix}=0.7*0.00775+0.3*0.05588
+$$
+
+With this multiplication we got the same expected portfolio return as above.
+
+# Expected portfolio risk
+
+Before we calculate the expected portfolio risk we need to understand what is the expected portfolio variance.
+
+According to Portfolio Theory, the expected variance of a 2-asset portfolio returns is given by:
+
+$$
+VAR(PortReturns)=w_{1}^{2}VAR(r_{1})+w_{2}^{2}VAR(r_{2})+2w_{1}w_{2}COV(r_{1},r_{2})
+$$ $r_1$ refers to returns of stock 1, and $r_2$ refers to returns of stock 2.
+
+$COV(r_1,r_2)$ is the covariance of return 1 and return 2.
+
+Check the lecture note Basics of Portfolio Theory-Note 1 to understand why this is the way to estimate the expected variance of a 2-asset portfolio.
+
+It is worth to remember what is covariance.
+
+## What is covariance of 2 stock returns?
+
+**The covariance of 2 stock returns is the arithmetic mean of the product return deviations**. A deviation is the difference between the stock return in a period t and its mean. Here is the formula:
+
+$$
+COV(r_{1},r_{2})=\frac{(r_{(1,1)}-\bar{r_{1}})(r_{(2,1)}-\bar{r_{2}})+(r_{(1,2)}-\bar{r_{1}})(r_{(2,2)}-\bar{r_{2}})+(r_{(1,3)}-\bar{r_{1}})(r_{(2,3)}-\bar{r_{2}})+...}{N}
+$$
+
+Were:
+
+$r_{(1,1)}$ is the return of stock 1 in the period 1
+
+$r_{(2,1)}$ is the return of stock 2 in the period 1
+
+Then:
+
+$r_{(i,j)}$ is the return of stock i in the period j
+
+$\bar{r_{1}}$ is the average return of stock 1
+
+$\bar{r_{2}}$ is the average return of stock 2
+
+Then, in the numerator we have a sum of product deviations. Each product deviation is the deviation of the stock 1 return multiplied by the deviation of the stock 2 return.
+
+The covariance is a measure of linear relationship between 2 variables. If covariance between stock return 1 and stock return 2 is positive this means that both stock returns are positively related. In other words, when stock 1 return moves up it is likely that stock 2 return moves up and vice versa; both returns move in the same direction (not always, but mostly).
+
+If covariance is negative that means that stock 1 return is negatively related to stock 2 return; when stock 1 return moves up it is likely that stock 2 return moves down.
+
+Covariance can be a negative or positive number (it is not limited to any number). It is very difficult to interpret the magnitude of covariance. It is much more intuitive if we **standardize covariance**.
+
+The standardization of the covariance is called correlation.
+
+## What is correlation of 2 stock returns?
+
+Correlation of 2 stock returns is also a measure of linear relationship between both returns. The difference compared to covariance is that the possible values of correlation is between -1 and +1, and the correlation gives us a percentage of linear relationship.
+
+Correlation between 2 returns is the covariance between the 2 returns divided by the product of standard deviation of return 1 and standard deviation of return 2.
+
+We calculate correlation as follows:
+
+$$
+CORR(r_{1},r_{2})=\frac{COV(r_{1},r_{2})}{SD(r_{1})SD(r_{2})}
+$$
+
+Correlation has the following possible values:
+
+$$
+-1<=CORR(r_{1},r_{2})<=+1
+$$
+
+## Expected variance of a portfolio
+
+Now we can calculate the expected variance of our portfolio according to the previous formula:
+
+### Method 1: using sum of products
+
+```{r}
+VAR1 = var(r$WMT,na.rm=TRUE)
+VAR2 = var(r$TSLA,na.rm=TRUE)
+COV = var(x=r$WMT,y=r$TSLA,na.rm=TRUE)
+
+VarPortfolio = w1^2 * VAR1 + w2^2 * VAR2 + 2*w1*w2*COV
+VarPortfolio
+```
+
+### Method 2: using matrix algebra
+
+Another faster method to get the expected variance of a portfolio is by multiplying the following matrices:
+
+$$
+t\left(W\right)*COV*W
+$$ Where:
+
+$$
+W=\begin{bmatrix}w_{1}\\
+w_{2}
+\end{bmatrix}
+$$
+
+And COV is the **Variance-Covariance matrix**, which has the return variances in the diagonal and the pair correlations in the non-diagonal:
+
+$$
+COV=\begin{bmatrix}VAR(r_{2}) & COV(r_{1},r_{2})\\
+COV(r_{2},r_{1}) & VAR(r_{1})
+\end{bmatrix}
+$$
+
+We can easily calculate the expected portfolio variance with matrix multiplication in R as follows:
+
+```{r}
+# We calculate the Variance-Covariance matrix with the var function:
+COV =var(r,na.rm=TRUE)
+# Note var function calculates the variance-covariance matrix if r has more than 1 column.
+# If r has only 1 column, then var calculates only the variance of that column.
+COV
+
+VarPortfolio = t(W) %*% COV %*% W
+VarPortfolio
+```
+
+It is always good to review the correlation matrix of the asset returns of a portfolios. We can get the correlation matrix from the covariance matrix as follows:
+
+```{r}
+CORR = cov2cor(COV)
+CORR
+```
+
+In this case we see 1's in the diagonal since the correlation of an asset return with itself will always be equal to 1. In the diagonal we see the level of correlation between both asset returns.
+
+We got the same result as above, but the result now is a matrix of 1 row and 1 element.
+
+## Expected risk of a portfolio
+
+To get the expected risk of a portfolio, we simply get the squared root of the expected variance:
+
+$$
+PortRisk=SD(PortReturns)=\sqrt{VAR(PortReturns)}
+$$
+
+We do this in R as follows:
+
+```{r}
+PortRisk = sqrt(VarPortfolio[1,1])
+PortRisk
+```
+
+The expected portfolio monthly risk is `r 100*PortRisk`%. Remember that portfolio risk is also called portfolio volatility. We can annualize portfolio volatility:
+
+```{r}
+AnnualPortRisk = sqrt(12) * PortRisk
+AnnualPortRisk
+```
+
+The expected portfolio annual risk is `r 100*AnnualPortRisk`%.
+
+## Drivers of Portfolio Diversification
+
+Financial portfolios allow an investor to diversify the risk. The main drivers of portfolio diversification are:
+
+1)  N - the number of financial assets. The more the financial assets, the higher the expected diversification.
+
+2)  Combination of pair of correlations between asset returns. The less the correlation of the pair of assets, the more the diversification.
+
+The first driver is just given by N, the number of assets.
+
+The second driver can actually be manipulated by changing the weights allocated for each asset.
+
+In the following section we illustrate how changing asset weights actually change both, the expected return of the portfolio and the expected portfolio volatility.
+
+# Risk-return space - set of feasible portfolios
+
+Weight combination determines both expected risk and expected return of a portfolio. Let's do an example with the same 2-asset portfolio:
+
+## Frontier of 2-asset portfolios
+
+Let's create a set of 11 portfolios where we change the weight assigned to the first stock from 0 to 1 changing by 0.10. We can create a matrix of weights, where each column represents one portfolio:
+
+$$
+W=\begin{bmatrix}0 & 0.1 & 0.2 & 0.3 & 0.4 & 0.5 & 0.6 & 0.7 & 0.8 & 0.9\\
+1 & 0.9 & 0.8 & 0.7 & 0.6 & 0.5 & 0.4 & 0.3 & 0.2 & 0.1
+\end{bmatrix}
+$$
+
+We had already calculated the vector of expected return for each stock:
+
+$$
+ER=\begin{bmatrix}ER_{1}\\
+ER_{2}
+\end{bmatrix}=\begin{bmatrix}0.00775\\
+0.05588
+\end{bmatrix}
+$$
+
+Using the advantage of matrix algebra we can easily get the 11 portfolio expected returns as follows:
+
+$$
+ERPortfolios=t(W)*ER
+$$
+
+We compute this in R:
+
+```{r}
+# I first create a vector for the weights of the first stock:
+w1= seq(from=0,to=1,by=0.1)
+w1
+# The weight vector for stock 2 is just the complement of w1:
+w2 = 1 - w1
+w2
+
+# I construct the weight matrix with the cbind function:
+
+W = rbind(w1,w2)
+W
+
+# I compute the expected return of the 11 portfolios:
+ERPortfolios = t(W) %*% ER
+
+```
+
+We see that the portfolios with higher expected returns are the first, which are the portfolios with higher weight in stock 2.
+
+Now we can compute the expected risk of the 11 portfolio as follows:
+
+```{r}
+VARPortfolios = t(W) %*% COV %*% W
+
+```
+
+When we have more than 1 portfolio in the weight matrix, the result of the previous matrix multiplication will be a matrix of 11 rows and 11 columns. The expected variance of the 11 portfolio result in the diagonal of the previous multiplication:
+
+```{r}
+VARPortfolios = diag(VARPortfolios)
+VARPortfolios
+```
+
+Finally, the expected portfolio volatility is the squared root of these 11 expected variances:
+
+```{r}
+RISKPortfolios = sqrt(VARPortfolios)
+RISKPortfolios
+```
+
+Now that we have the 11 portfolio risk and 11 portfolio returns we can plot the 11 portfolios in the risk-return space:
+
+```{r}
+plot(x=RISKPortfolios,y= ERPortfolios,
+     xlabel="Portfolio Expected Risk", ylabel="Portfolio Expected Return")
+text(x=RISKPortfolios,y= ERPortfolios,
+     labels=w1, cex=0.7, pos=3)
+```
+
+Weights of stock 1 (WMT) are shown in each portfolio. We see that less the w1, the less the expected portfolio risk, but the less the expected portfolio return.
+
+With this illustration we can see how asset weight combination in a portfolio actually change the expected return and risk of a portfolio!
+
+This plot is called the frontier of feasible portfolios of 2 assets. Interestingly, for portfolios with 3 or more assets, the possibilities of feasible portfolios become will not be a nice frontier like this. The feasible portfolios will be in between a frontier. In other words, for these portfolios some feasible portfolios will not be **efficient** since there will be other feasible portfolios with the same level of expected risk, but with higher expected return.
+
+Let's do an example of 4-asset portfolios.
+
+## Risk-return space of 4-asset portfolios
+
+We will add 2 stocks to our portfolio: Oracle (ORCL) and Freeport-McMoran, Inc (FCX). This last firm is a mining company. I will collect the data for the 4 assets using the same code we used above:
+
+```{r}
+tickers = c("WMT","TSLA","ORCL","FCX")
+getSymbols(Symbols = tickers, periodicity="monthly",from="2020-01-01", to="2023-10-31")
+
+datasets_list <- lapply(tickers, get)
+
+# Merging the datasets:
+prices <- do.call(merge, datasets_list)
+# We select only Adjusted prices:
+prices <- Ad(prices)
+
+# We change the name of the columns to be equal to the tickers vector:
+names(prices) = tickers
+
+#Calculating continuously compounded returns:
+
+r = diff(log(prices))
+
+```
+
+Since we have now 4 assets, let's create many feasible portfolios with random weights, but with the condition that the sum of the weights must be 1 (100%). Let's create 1,000 random portfolios:
+
+```{r}
+# Initialize the Weight matrix
+W = c()
+# Create 4 vectors of 1000 random values from 0 to 1:
+for(i in 1:4) {
+  W = rbind(W,runif(1000))
+}
+# The problem I have now is that some of the 1,000 portfolios
+#  might end up having a sum of weights higher than one. 
+# I can do a simple "trick" by 
+#   dividing each of the 4 weights by the sum of these 4
+#   weights. And I can do this # for all 1000 portfolios: 
+
+# I first create a vector with the sum of weights for all portfolios:
+sumw <- colSums(W)
+# I do another loop to divide each weight by the sum of weights: 
+for(i in 1:4)  {
+  W[i,]<-W[i,]/sumw
+  # In each iteration I divide one raw of W2 by the vector sumw, 
+  #  which is the sum of the weights of all 1000 portfolios
+}
+
+# I check that the sum of weights is 1 (I do this for 5 portfolios)
+W[,1:5]
+
+colSums(W[,1:5])
+# All sums are equal to 1, as expected
+
+# Then each column of this matrix represents a random portfolio without allowing for short sales. 
+```
+
+I calculate the expected return of each asset:
+
+```{r}
+ER = exp(colMeans(r,na.rm=TRUE)) - 1
+ER
+```
+
+I calculate the variance-covariance matrix:
+
+```{r}
+COV = var(r,na.rm=TRUE)
+COV
+
+```
+
+I calculate the correlation matrix to review the correlation levels of pair of assets:
+
+```{r}
+CORR = cov2cor(COV)
+CORR
+```
+
+The lowest correlations are the one between ORCL and TSLA and the correlation between WMT and FCX (around 0.12).
+
+We can calculate the expected return of the 1,000 portfolios:
+
+```{r}
+ERPortfolios = t(W) %*% ER
+```
+
+We can calculate the expected risk of the 1,000 portfolios:
+
+```{r}
+VARPortfolios = diag(t(W) %*% COV %*% W) 
+RISKPortfolios = sqrt(VARPortfolios)
+
+```
+
+Now we can visualize the feasible portfolios in the risk-return space:
+
+```{r}
+plot(x=RISKPortfolios,y= ERPortfolios,
+     xlabel="Portfolio Expected Risk", ylabel="Portfolio Expected Return")
+
+```
+
+We can see that for each level of expected risk there are many possible portfolios. The best portfolios will be those that lie in the frontier of this feasible portfolios.
+
+The problem we have when we have 3 or more assets in a portfolio is that we need to find the efficient frontier to get only those portfolios that maximize the expected return for each level of expected risk.
+
+Here is where we need to find optimization algorithms to do this.
+
+In the lecture note Basics of Portfolio Theory - Part III I explain what type of optimization methods can be used.
+
+Fortunately, we can use R packages that already do these complicated optimization algorithms.
+
+# Portfolio optimization
+
+Out of all feasible portfolios we might be interested in the following:
+
+1)  The portfolio with the least expected risk of all - The Global Minimum Variance Portfolio (GMV)
+
+2)  The efficient frontier - all portfolios that offer the highest expected return for any level of expected risk
+
+3)  The tangent/optimal portfolio - The portfolio with the highest Sharpe Ratio
+
+You need to install the IntroCompFinR package. You need to install this package using the Console, and typing:
+
+*install.packages("IntroCompFinR", repos="http://R-Forge.R-project.org")*
+
+If you copy.paste this line from this Workshop, re-type  the double quotes (") before you run in the Console.  
+
+## Estimating the global minimum variance portfolio
+
+We can easily get the GMV portfolio as follows:
+
+```{r}
+library(IntroCompFinR)
+
+GMVPort = globalMin.portfolio(ER,COV)
+GMVPort
+
+```
+
+Allowing for short-sales, the portfolio with the minimum variance has an expected return of `r GMVPort$er`, and expected risk of `r GMVPort$sd`. We see that FCX has a negative weight, meaning that we need to short FCX with 3.4%.
+
+We can estimate the GMV portfolio without allowing for short sales:
+
+```{r}
+GMVPort = globalMin.portfolio(ER,COV, shorts = FALSE)
+GMVPort
+
+```
+
+Now the GMV assigned 0% to FCX and 0% to TSLA. This makes sense since both stocks are very volatile. We can check the volatility of each of the stock returns:
+
+```{r}
+table.Stats(r)
+```
+
+We can see that the historical volatility (Stdev) of Tesla and FCX are much higher than the volatility of ORCL and WMT.
+
+## Estimating the efficient frontier
+
+```{r}
+efrontier <- efficient.frontier(ER, COV, nport = 100, 
+                         alpha.min = -0.5, 
+                         alpha.max = 1.5, shorts = FALSE)
+plot(efrontier, plot.assets=TRUE, col="blue")
+```
+
+## Estimating the optimal/tangent portfolio
+
+```{r}
+rfree = 0
+tangentPort = tangency.portfolio(ER, COV,rfree, shorts=FALSE)
+tangentPort
+tangentPortWeights = getPortfolio(ER, COV, weights=tangentPort$weights)
+plot(tangentPortWeights, col="blue")
+```
+
+Finally, we can plot the efficient frontier, the tangent portfolio and the Capital Market Line:
+
+```{r}
+plot(efrontier, plot.assets=TRUE, col="blue", pch=16)
+points(GMVPort$sd, GMVPort$er, col="green", pch=16, cex=2)
+points(tangentPort$sd, tangentPort$er, col="red", pch=16, cex=2)
+text(GMVPort$sd, GMVPort$er, labels="GLOBAL MIN", pos=2)
+text(tangentPort$sd, tangentPort$er, labels="TANGENCY", pos=2)
+
+SharpeRatio = (tangentPort$er - rfree)/tangentPort$sd
+
+abline(a=rfree, b=SharpeRatio, col="green", lwd=2)
+```
+
+The Capital Market Line (CML) is the green line that goes from the risk-free rate to the tangent portfolio. One of the main findings of portfolio theory is that when we add 1 risk-free instrument to a portfolio composed of stocks, the new efficient frontier becomes the Capital Market Line (instead of the hyperbola), which is more efficient that the previous efficient frontier (the hyperbola).
+
+Then, an investor can play between the tanget portfolio and the risk-free rate to move in the CML. If an investor has a middle-level aversion to risk, he/she might select to allocate 50% to the risk-free asset and the rest 50% in the tangent portfolio, locating the portfolio in a mid-point in the CML between the risk-free rate and the tangent portfolio.
+
+## Assumptions of Portfolio Theory
+
+The main assumption of portfolio theory is that all investors behave as rational participants all the time. In other words, they always maximize return and minimize risk using the available information disclosed to the market in a rational way. In other words, they act with no emotions, no fear and they always understand what happen in the market.
+
+# What if most of the investors are not rational all the time?
+
+If most of the investors are not rational all the time, how can you take advantage of this and define a disruptive portfolio? Which trends, beliefs, fears, regulations, opportunities do you think that few investors are looking for, so that you can beat the rational optimized portfolio?
+
+Based on your own set of beliefs and your understanding of portfolio risk-return trade-off, propose weights for a "disruptive" portfolio that might beat most of the optimized portfolios in the market?
+
+# Challenge
+
+Create a vector of 10 tickers (select any you prefer). If you prefer, select the best 10 tickers you got from Workshop 2. 
+
+With this vector, bring monthly data from Yahoo from Jan 2020 to Oct 2023, and do the following:
+
+1.- Generate the Global Minimum Variance Portfolio
+
+2.- Generate 10,000 portfolios with random weights for each asset.
+
+3.- (Optional) Propose 2 portfolios: Conservative, Aggressive. Include the description of each portfolio, expected return and volatility.
+
+# W3 submission
+
+The grade of this Workshop will be the following:
+
+-   Complete (100%): If you submit an ORIGINAL and COMPLETE HTML file with all the activities, with your notes, and with your OWN RESPONSES to questions
+
+-   Incomplete (75%): If you submit an ORIGINAL HTML file with ALL the activities but you did NOT RESPOND to the questions and/or you did not do all activities and respond to some of the questions.
+
+-   Very Incomplete (10%-70%): If you complete from 10% to 75% of the workshop or you completed more but parts of your work is a copy-paste from other workshops.
+
+-   Not submitted (0%)
+
+Remember that you have to submit your .html file through Canvas BEFORE THE FIRST CLASS OF NEXT WEEK.
