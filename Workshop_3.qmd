@@ -845,8 +845,20 @@ plot(efrontier, plot.assets=TRUE, col="blue")
 
 ## Estimating the optimal/tangent portfolio
 
+We need to define a risk-free rate before estimating the optimal portfolio, since the returns that are important for an investor is the premium returns, which are the returns above the risk-free instrument.
+
+In this case, I check the current risk-free rate or the risk-free rate at the time of the portfolio formation. In this case, I assume that I am at the end of Oct 2023 (I downloaded stock price data until Oct 31, 2023), which was around 5.5% annual.
+
+It is important that I have to use the corresponding rate at granularity of my data. In this case, I am using monthly data, so I need to convert the risk-free rate from annual to monthly:
+
 ```{r}
-rfree = 0
+annual_rfree = 0.055 
+# I convert from simple to continuously compounded:
+ccannual_rfree = log(1+annual_rfree)
+# I convert from annual cc rate to monthly cc rate:
+rfree = ccannual_rfree / 12 
+rfree
+
 tangentPort = tangency.portfolio(ER, COV,rfree, shorts=FALSE)
 tangentPort
 tangentPortWeights = getPortfolio(ER, COV, weights=tangentPort$weights)
@@ -869,7 +881,7 @@ abline(a=rfree, b=SharpeRatio, col="green", lwd=2)
 
 The Capital Market Line (CML) is the green line that goes from the risk-free rate to the tangent portfolio. One of the main findings of portfolio theory is that when we add 1 risk-free instrument to a portfolio composed of stocks, the new efficient frontier becomes the Capital Market Line (instead of the hyperbola), which is more efficient that the previous efficient frontier (the hyperbola).
 
-Then, an investor can play between the tanget portfolio and the risk-free rate to move in the CML. If an investor has a middle-level aversion to risk, he/she might select to allocate 50% to the risk-free asset and the rest 50% in the tangent portfolio, locating the portfolio in a mid-point in the CML between the risk-free rate and the tangent portfolio.
+Then, an investor can play between the tangent portfolio and the risk-free rate to move in the CML. If an investor has a middle-level aversion to risk, he/she might allocate 50% to the risk-free asset and the rest 50% in the tangent portfolio, locating the portfolio in a mid-point in the CML (the green line) between the risk-free rate and the tangent portfolio.
 
 ## Assumptions of Portfolio Theory
 
